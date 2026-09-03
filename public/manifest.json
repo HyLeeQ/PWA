@@ -1,0 +1,44 @@
+{
+  "name": "VKU Field Survey",
+  "short_name": "FieldSurvey",
+  "description": "Ứng dụng khảo sát cơ sở vật chất khuôn viên Trường ĐH Công nghệ Thông tin và Truyền thông Việt – Hàn (VKU). Hoạt động hoàn toàn ngoại tuyến.",
+  "lang": "vi",
+  "dir": "ltr",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "portrait-primary",
+  "start_url": "/",
+  "scope": "/",
+  "background_color": "#0f0f1a",
+  "theme_color": "#6c63ff",
+  "categories": ["utilities", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Báo cáo mới",
+      "short_name": "Mới",
+      "description": "Tạo báo cáo khảo sát mới",
+      "url": "/new",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#6c63ff" />
+    <meta name="description" content="Ứng dụng khảo sát cơ sở vật chất khuôn viên VKU – hoạt động ngoại tuyến hoàn toàn." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="FieldSurvey" />
+
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <title>VKU Field Survey</title>
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <!-- Offline / Online banner -->
+    <div id="network-banner" class="network-banner hidden" role="status" aria-live="polite"></div>
+
+    <!-- Toast notifications -->
+    <div id="toast-container" class="toast-container" aria-live="assertive"></div>
+
+    <!-- PWA Install prompt -->
+    <div id="install-prompt" class="install-prompt hidden" role="complementary">
+      <div class="install-prompt__content">
+        <img src="/icons/icon-192.png" alt="VKU Field Survey icon" class="install-prompt__icon" />
+        <div>
+          <p class="install-prompt__title">Cài đặt ứng dụng</p>
+          <p class="install-prompt__subtitle">Thêm vào màn hình chính để dùng ngoại tuyến</p>
+        </div>
+        <button id="install-btn" class="btn btn--primary btn--sm">Cài đặt</button>
+        <button id="install-dismiss-btn" class="btn btn--ghost btn--sm">✕</button>
+      </div>
+    </div>
+
+    <!-- Main app shell — router replaces this -->
+    <div id="app" role="main">
+      <!-- Content injected by router -->
+    </div>
+  </body>
+</html>
