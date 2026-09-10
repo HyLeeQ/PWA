@@ -1,15 +1,16 @@
 import { openDB, type IDBPDatabase } from 'idb';
-import type { InspectionRecord } from './types';
+import type { InspectionRecord, SurveyDraft } from './types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Database constants
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DB_NAME = 'vku-field-survey';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 /** Store for inspection records (the primary data store). */
 const RECORDS_STORE = 'records';
+const DRAFTS_STORE = 'drafts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DB schema type (required by idb for full type safety)
@@ -24,10 +25,14 @@ interface FieldSurveyDB {
       'by-createdAt': number;  // timestamp
     };
   };
+  [DRAFTS_STORE]: {
+    key: string; // 'current_draft'
+    value: SurveyDraft;
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Singleton DB promise — only one openDB call per page lifetime
+// Singleton DB promise
 // ─────────────────────────────────────────────────────────────────────────────
 
 let _dbPromise: Promise<IDBPDatabase<FieldSurveyDB>> | null = null;
@@ -41,14 +46,15 @@ function getDB(): Promise<IDBPDatabase<FieldSurveyDB>> {
           const recordsStore = database.createObjectStore(RECORDS_STORE, {
             keyPath: 'localId',
           });
-
-          // Index by sync status so getPendingRecords() is O(log n)
           recordsStore.createIndex('by-status', 'status', { unique: false });
-
-          // Index by creation time for chronological list rendering
           recordsStore.createIndex('by-createdAt', 'createdAt', { unique: false });
         }
-        // Future migrations go here as `if (oldVersion < 2) { ... }`
+        // ── Version 2: drafts store for real-time draft persistence ──────────
+        if (oldVersion < 2) {
+          if (!database.objectStoreNames.contains(DRAFTS_STORE)) {
+            database.createObjectStore(DRAFTS_STORE, { keyPath: 'id' });
+          }
+        }
       },
 
       blocked() {
@@ -56,7 +62,6 @@ function getDB(): Promise<IDBPDatabase<FieldSurveyDB>> {
       },
 
       blocking() {
-        // A newer version of the SW opened a new DB version; let it through.
         _dbPromise = null;
       },
 
@@ -70,24 +75,14 @@ function getDB(): Promise<IDBPDatabase<FieldSurveyDB>> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Public API
+// Public API: Records
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Persist a new inspection record. Throws if the localId already exists.
- * Always call this with status === 'pending_sync' or 'draft'.
- */
 export async function addRecord(record: InspectionRecord): Promise<void> {
   const db = await getDB();
   await db.add(RECORDS_STORE, record);
 }
 
-/**
- * Partially update an existing record by its localId.
- * Only the supplied fields are changed; all others are preserved.
- *
- * @throws {Error} if no record with the given localId exists
- */
 export async function updateRecord(
   localId: string,
   patch: Partial<Omit<InspectionRecord, 'localId'>>,
@@ -104,7 +99,7 @@ export async function updateRecord(
   const updated: InspectionRecord = {
     ...existing,
     ...patch,
-    localId, // never overwrite the key
+    localId,
     updatedAt: Date.now(),
   };
 
@@ -112,37 +107,22 @@ export async function updateRecord(
   await tx.done;
 }
 
-/**
- * Retrieve a single record by localId. Returns undefined if not found.
- */
 export async function getRecord(localId: string): Promise<InspectionRecord | undefined> {
   const db = await getDB();
   return db.get(RECORDS_STORE, localId);
 }
 
-/**
- * Retrieve all records, ordered by createdAt descending (newest first).
- */
 export async function getAllRecords(): Promise<InspectionRecord[]> {
   const db = await getDB();
-  // IDB cursor on index in 'prev' direction = descending
   const records = await db.getAllFromIndex(RECORDS_STORE, 'by-createdAt');
   return records.reverse();
 }
 
-/**
- * Retrieve only records that are waiting to be uploaded to the server.
- * Used by the sync queue to know what to POST.
- */
 export async function getPendingRecords(): Promise<InspectionRecord[]> {
   const db = await getDB();
   return db.getAllFromIndex(RECORDS_STORE, 'by-status', 'pending_sync');
 }
 
-/**
- * Mark a record as successfully synced.
- * Sets status → 'synced', populates serverId, and stamps syncedAt.
- */
 export async function markSynced(localId: string, serverId: string): Promise<void> {
   await updateRecord(localId, {
     status: 'synced',
@@ -152,10 +132,6 @@ export async function markSynced(localId: string, serverId: string): Promise<voi
   });
 }
 
-/**
- * Mark a record sync attempt as failed.
- * Increments retries and records the error message.
- */
 export async function markSyncError(localId: string, error: string): Promise<void> {
   const existing = await getRecord(localId);
   if (!existing) return;
@@ -166,26 +142,50 @@ export async function markSyncError(localId: string, error: string): Promise<voi
   });
 }
 
-/**
- * Permanently delete a record from IndexedDB.
- */
 export async function deleteRecord(localId: string): Promise<void> {
   const db = await getDB();
   await db.delete(RECORDS_STORE, localId);
 }
 
-/**
- * Count all records (for the dashboard badge).
- */
 export async function countAllRecords(): Promise<number> {
   const db = await getDB();
   return db.count(RECORDS_STORE);
 }
 
-/**
- * Count only pending records (for the sync badge).
- */
 export async function countPendingRecords(): Promise<number> {
   const db = await getDB();
   return db.countFromIndex(RECORDS_STORE, 'by-status', 'pending_sync');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public API: Real-time Draft Persistence (IndexedDB)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function saveDraftState(draft: Omit<SurveyDraft, 'id'>): Promise<void> {
+  const db = await getDB();
+  const record: SurveyDraft = {
+    ...draft,
+    id: 'current_draft',
+    updatedAt: Date.now(),
+  };
+  await db.put(DRAFTS_STORE, record);
+}
+
+export async function getDraftState(): Promise<SurveyDraft | undefined> {
+  try {
+    const db = await getDB();
+    return await db.get(DRAFTS_STORE, 'current_draft');
+  } catch (err) {
+    console.warn('[DB] Could not retrieve draft:', err);
+    return undefined;
+  }
+}
+
+export async function clearDraftState(): Promise<void> {
+  try {
+    const db = await getDB();
+    await db.delete(DRAFTS_STORE, 'current_draft');
+  } catch (err) {
+    console.warn('[DB] Could not clear draft:', err);
+  }
 }

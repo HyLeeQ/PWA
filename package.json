@@ -19,6 +19,7 @@
     "@capacitor/cli": "^8.5.1",
     "@capacitor/core": "^8.5.1",
     "@capacitor/geolocation": "^8.2.2",
+    "@capacitor/network": "^8.0.1",
     "idb": "^8.0.3",
     "uuid": "^14.0.2",
     "vite-plugin-pwa": "^1.3.0",

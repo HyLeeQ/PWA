@@ -5,7 +5,9 @@ import {
   markSynced,
   markSyncError,
   updateRecord,
+  clearDraftState,
 } from './db';
+import { getNetworkStatus, addNetworkListener } from './capacitor-plugins';
 import type {
   InspectionRecord,
   NewInspectionRecord,
@@ -17,21 +19,12 @@ import type {
 // Configuration
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Mock sync endpoint — mirrors the POST body back in the response JSON.
- * In production, replace with your real API URL.
- * httpbin.org/post responds with { json: <your payload> }
- */
 const SYNC_ENDPOINT = 'https://httpbin.org/post';
-
-/** Background Sync API tag — must match sw.ts */
 const BACKGROUND_SYNC_TAG = 'sync-inspections';
-
-/** Maximum number of auto-retries before a record is marked 'error'. */
 const MAX_RETRIES = 3;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Event emitter (tiny pub/sub for UI updates)
+// Event emitter (pub/sub for UI updates)
 // ─────────────────────────────────────────────────────────────────────────────
 
 type SyncEventType = 'sync-start' | 'sync-complete' | 'sync-error' | 'record-synced';
@@ -53,7 +46,6 @@ export function onSyncEvent<T extends SyncEventType>(
 ): () => void {
   if (!listeners.has(event)) listeners.set(event, new Set());
   listeners.get(event)!.add(listener as SyncListener<SyncEventType>);
-  // Return an unsubscribe function
   return () => listeners.get(event)?.delete(listener as SyncListener<SyncEventType>);
 }
 
@@ -67,13 +59,10 @@ function emit<T extends SyncEventType>(event: T, payload: SyncEventMap[T]): void
 
 /**
  * Submit a new inspection record.
- *
- * Flow:
- *  1. Assign a UUID localId and timestamps.
- *  2. Write to IndexedDB immediately (offline-safe).
- *  3. If online → attempt sync right away.
- *  4. If offline → register Background Sync (Chrome/Android) + attach a
- *     one-time 'online' event listener as universal fallback (iOS Safari).
+ * 1. Assign a UUID localId and timestamps.
+ * 2. Save to IndexedDB with status 'pending_sync'.
+ * 3. Clear the active in-progress draft from IndexedDB.
+ * 4. If online → attempt sync immediately; if offline → queue for background sync.
  */
 export async function submitRecord(data: NewInspectionRecord): Promise<InspectionRecord> {
   const now = Date.now();
@@ -87,12 +76,15 @@ export async function submitRecord(data: NewInspectionRecord): Promise<Inspectio
     updatedAt: now,
   };
 
-  // 1. Persist locally — this NEVER fails due to network
+  // 1. Persist locally to IndexedDB — offline-safe
   await addRecord(record);
 
-  // 2. Attempt to sync
-  if (navigator.onLine) {
-    // Fire-and-forget; UI updates via onSyncEvent listeners
+  // 2. Clear current in-progress draft
+  await clearDraftState().catch(console.warn);
+
+  // 3. Check connectivity via Capacitor Network / navigator
+  const net = await getNetworkStatus();
+  if (net.connected) {
     attemptSync().catch(console.error);
   } else {
     await registerBackgroundSync();
@@ -101,10 +93,6 @@ export async function submitRecord(data: NewInspectionRecord): Promise<Inspectio
   return record;
 }
 
-/**
- * Save a record as a 'draft' (not yet submitted for sync).
- * Useful for auto-save while the user is filling out the form.
- */
 export async function saveDraft(data: NewInspectionRecord): Promise<InspectionRecord> {
   const now = Date.now();
   const record: InspectionRecord = {
@@ -119,12 +107,10 @@ export async function saveDraft(data: NewInspectionRecord): Promise<InspectionRe
   return record;
 }
 
-/**
- * Promote a draft (or error) record to pending_sync and attempt sync.
- */
 export async function retryRecord(localId: string): Promise<void> {
   await updateRecord(localId, { status: 'pending_sync' });
-  if (navigator.onLine) {
+  const net = await getNetworkStatus();
+  if (net.connected) {
     await attemptSync();
   } else {
     await registerBackgroundSync();
@@ -132,26 +118,27 @@ export async function retryRecord(localId: string): Promise<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sync engine
+// Sequential Sync Engine
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Prevent multiple concurrent sync runs */
 let _syncInProgress = false;
 
 /**
- * Drain the pending_sync queue.
- * Sends one record at a time to avoid overwhelming the server.
- * On failure, marks the record 'error' if max retries exceeded.
+ * Drain the pending_sync queue sequentially.
  */
 export async function attemptSync(): Promise<SyncResult> {
   if (_syncInProgress) {
     return { attempted: 0, succeeded: 0, failed: 0 };
   }
 
+  const pending = await getPendingRecords();
+  if (pending.length === 0) {
+    return { attempted: 0, succeeded: 0, failed: 0 };
+  }
+
   _syncInProgress = true;
   emit('sync-start', undefined);
 
-  const pending = await getPendingRecords();
   const result: SyncResult = { attempted: pending.length, succeeded: 0, failed: 0 };
 
   for (const record of pending) {
@@ -176,7 +163,7 @@ export async function attemptSync(): Promise<SyncResult> {
   _syncInProgress = false;
 
   if (result.failed > 0) {
-    emit('sync-error', `${result.failed} record(s) failed to sync`);
+    emit('sync-error', `${result.failed} báo cáo chưa thể đồng bộ`);
   }
   emit('sync-complete', result);
 
@@ -187,14 +174,15 @@ export async function attemptSync(): Promise<SyncResult> {
 // HTTP transport
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Serialize one InspectionRecord and POST it to the sync endpoint.
- * Returns the serverId assigned by the server (or a generated one for mock).
- */
 async function postRecord(record: InspectionRecord): Promise<string> {
   const payload: SyncPayload = {
     localId: record.localId,
+    building: record.building,
+    floor: record.floor,
+    room: record.room,
     buildingRoom: record.buildingRoom,
+    category: record.category,
+    rating: record.rating,
     issueType: record.issueType,
     priority: record.priority,
     notes: record.notes,
@@ -204,7 +192,6 @@ async function postRecord(record: InspectionRecord): Promise<string> {
     createdAt: record.createdAt,
   };
 
-  // Convert Blob → base64 if a photo is attached
   if (record.photoBlob) {
     payload.photoBase64 = await blobToBase64(record.photoBlob);
     payload.photoMimeType = record.photoMimeType;
@@ -220,66 +207,33 @@ async function postRecord(record: InspectionRecord): Promise<string> {
     throw new Error(`HTTP ${response.status} ${response.statusText}`);
   }
 
-  // httpbin.org mirrors the payload; extract a mock serverId from the response
-  // In production: const { id } = await response.json(); return id;
-  const body = await response.json() as { json?: { localId?: string } };
+  const body = (await response.json()) as { json?: { localId?: string } };
   return body.json?.localId ?? `server-${Date.now()}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Background Sync registration + online event fallback
+// Background Sync & Network monitoring listeners
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Register a Background Sync tag if the API is supported.
- * Falls back to a one-time 'online' listener for iOS Safari / Firefox.
- */
 async function registerBackgroundSync(): Promise<void> {
   const swReg = await getServiceWorkerRegistration();
 
   if (swReg && 'sync' in swReg) {
     try {
-      // Cast to any to access Background Sync API which is not in standard TS lib
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (swReg as any).sync.register(BACKGROUND_SYNC_TAG);
       console.log('[Sync] Background Sync registered:', BACKGROUND_SYNC_TAG);
     } catch (err) {
-      console.warn('[Sync] Background Sync registration failed, using online fallback:', err);
-      attachOnlineFallback();
+      console.warn('[Sync] Background Sync failed, using network fallback:', err);
     }
-  } else {
-    // Browser does not support Background Sync API (e.g. iOS Safari, Firefox)
-    console.log('[Sync] Background Sync not supported, using online event fallback');
-    attachOnlineFallback();
   }
 }
 
-/** Ensure we only attach one online listener at a time */
-let _onlineFallbackAttached = false;
-
-function attachOnlineFallback(): void {
-  if (_onlineFallbackAttached) return;
-  _onlineFallbackAttached = true;
-
-  const handler = () => {
-    _onlineFallbackAttached = false;
-    window.removeEventListener('online', handler);
-    console.log('[Sync] Online event fired — draining sync queue');
-    attemptSync().catch(console.error);
-  };
-
-  window.addEventListener('online', handler);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SW message listener (receives SW_SYNC_TRIGGER from sw.ts)
-// ─────────────────────────────────────────────────────────────────────────────
-
 /**
- * Listen for the SW's postMessage broadcast when a Background Sync fires.
- * This bridges the SW context → page context for the actual DB operations.
+ * Initialize network monitoring using @capacitor/network and SW messages.
  */
 export function initSyncMessageListener(): void {
+  // 1. Listen for SW Background Sync messages
   navigator.serviceWorker?.addEventListener('message', (event: MessageEvent) => {
     if (event.data?.type === 'SW_SYNC_TRIGGER') {
       console.log('[Sync] SW_SYNC_TRIGGER received — attempting sync');
@@ -287,10 +241,17 @@ export function initSyncMessageListener(): void {
     }
   });
 
-  // Also handle the online event at the module level so any pending records
-  // are synced whenever the browser reports connectivity (belt-and-suspenders).
+  // 2. Real-time Capacitor Network monitoring (native & web)
+  addNetworkListener((status) => {
+    if (status.connected) {
+      console.log('[Sync] Network connected (type: ' + status.connectionType + ') — draining queue');
+      attemptSync().catch(console.error);
+    }
+  });
+
+  // 3. Fallback window online event
   window.addEventListener('online', () => {
-    console.log('[Sync] online event — draining queue');
+    console.log('[Sync] window.online event — draining queue');
     attemptSync().catch(console.error);
   });
 }

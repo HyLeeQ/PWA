@@ -13,12 +13,12 @@
   --color-glass-border: rgba(255, 255, 255, 0.1);
   --color-glass-hover:  rgba(255, 255, 255, 0.08);
 
-  --color-accent:       #6c63ff;
-  --color-accent-light: #8b83ff;
-  --color-accent-glow:  rgba(108, 99, 255, 0.3);
+  --color-accent:       #0284c7;
+  --color-accent-light: #38bdf8;
+  --color-accent-glow:  rgba(2, 132, 199, 0.35);
 
-  --color-cyan:         #22d3ee;
-  --color-cyan-glow:    rgba(34, 211, 238, 0.25);
+  --color-cyan:         #38bdf8;
+  --color-cyan-glow:    rgba(56, 189, 248, 0.25);
 
   --color-success:      #22c55e;
   --color-success-bg:   rgba(34, 197, 94, 0.12);
@@ -1018,3 +1018,314 @@ textarea.form-control {
 .mb-4 { margin-bottom: var(--space-4); }
 .w-full { width: 100%; }
 .text-center { text-align: center; }
+
+/* ── 27. Header Enhancements ─────────────────────────────────────────────── */
+.header__badge {
+  display: inline-block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: rgba(2, 132, 199, 0.2);
+  color: var(--color-cyan);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  margin-left: var(--space-2);
+  vertical-align: middle;
+}
+
+/* ── 28. Multi-Step Stepper ───────────────────────────────────────────────── */
+.stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-glass-border);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.stepper__step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  position: relative;
+  z-index: 2;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-text-muted);
+  transition: all var(--transition-normal);
+}
+
+.stepper__step-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 700;
+  background: var(--color-surface-2);
+  border: 2px solid var(--color-glass-border);
+  color: var(--color-text-secondary);
+  transition: all var(--transition-normal);
+}
+
+.stepper__step-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.stepper__step--active .stepper__step-num {
+  background: var(--color-accent);
+  border-color: var(--color-accent-light);
+  color: #fff;
+  box-shadow: 0 0 12px var(--color-accent-glow);
+}
+
+.stepper__step--active {
+  color: var(--color-cyan);
+}
+
+.stepper__step--completed .stepper__step-num {
+  background: var(--color-success);
+  border-color: var(--color-success);
+  color: #fff;
+}
+
+.stepper__step--completed {
+  color: var(--color-text-primary);
+}
+
+.stepper__line {
+  flex: 1;
+  height: 2px;
+  background: var(--color-glass-border);
+  margin: 0 var(--space-2);
+  position: relative;
+  top: -10px;
+  z-index: 1;
+  transition: background var(--transition-normal);
+}
+
+.stepper__line--completed {
+  background: var(--color-accent);
+}
+
+/* ── 29. Draft Status Banner ──────────────────────────────────────────────── */
+.draft-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-4);
+  background: rgba(2, 132, 199, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+  font-size: 0.8125rem;
+  color: var(--color-cyan);
+}
+
+.draft-banner__clear {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.draft-banner__clear:hover {
+  color: var(--color-error);
+}
+
+/* ── 30. Quick Pick Chips ─────────────────────────────────────────────────── */
+.quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.quick-chip {
+  padding: 4px 10px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-full);
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.quick-chip:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+  border-color: var(--color-accent-light);
+}
+
+.quick-chip--active {
+  background: rgba(2, 132, 199, 0.25);
+  border-color: var(--color-accent-light);
+  color: var(--color-cyan);
+  font-weight: 600;
+}
+
+/* ── 31. Category Grid Selector ───────────────────────────────────────────── */
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.category-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-3) var(--space-2);
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-glass-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.category-card:hover {
+  background: var(--color-surface-2);
+  border-color: rgba(56, 189, 248, 0.4);
+  transform: translateY(-2px);
+}
+
+.category-card--active {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.25), rgba(15, 23, 42, 0.8));
+  border-color: var(--color-accent-light);
+  box-shadow: 0 4px 16px var(--color-accent-glow);
+}
+
+.category-card__icon {
+  font-size: 2rem;
+  margin-bottom: var(--space-1);
+}
+
+.category-card__label {
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: var(--color-text-primary);
+  margin-bottom: 2px;
+}
+
+.category-card__desc {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  line-height: 1.2;
+}
+
+/* ── 32. 5-Star Rating Widget ─────────────────────────────────────────────── */
+.rating-widget {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-top: var(--space-2);
+}
+
+.rating-stars {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: center;
+}
+
+.star-btn {
+  background: none;
+  border: none;
+  font-size: 2.25rem;
+  color: rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+  line-height: 1;
+}
+
+.star-btn:hover,
+.star-btn--filled {
+  color: #fbbf24;
+  text-shadow: 0 0 16px rgba(251, 191, 36, 0.5);
+  transform: scale(1.12);
+}
+
+.star-btn:active {
+  transform: scale(0.95);
+}
+
+.rating-status {
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fcd34d;
+  min-height: 1.25rem;
+}
+
+/* ── 33. Multi-Step Form Actions ─────────────────────────────────────────── */
+.step-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-8);
+  margin-bottom: var(--space-6);
+}
+
+.step-actions .btn {
+  flex: 1;
+}
+
+/* ── 34. Review Summary Card (Step 3) ─────────────────────────────────────── */
+.review-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.review-card__header {
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: var(--color-cyan);
+  border-bottom: 1px solid var(--color-glass-border);
+  padding-bottom: var(--space-2);
+}
+
+.review-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8125rem;
+}
+
+.review-row__label {
+  color: var(--color-text-muted);
+}
+
+.review-row__value {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  text-align: right;
+}
+

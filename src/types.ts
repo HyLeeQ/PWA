@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// VKU Field Survey — Core Type Definitions
+// VKU Field Survey — Core Type Definitions (Project 1.2)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -12,17 +12,23 @@
 export type SyncStatus = 'draft' | 'pending_sync' | 'synced' | 'error';
 
 /**
- * Category of facility issue found during inspection.
+ * Hạng mục kiểm tra cơ sở vật chất (Project 1.2 requirements)
  */
-export type IssueType =
-  | 'electrical'
-  | 'plumbing'
-  | 'structural'
-  | 'hvac'
-  | 'cleanliness'
-  | 'safety'
-  | 'it_equipment'
-  | 'other';
+export type FacilityCategory = 'hardware' | 'projector' | 'ac' | 'electrical' | 'furniture';
+
+export interface CategoryInfo {
+  label: string;
+  icon: string;
+  desc: string;
+}
+
+export const CATEGORY_META: Record<FacilityCategory, CategoryInfo> = {
+  hardware: { label: 'Phần cứng', icon: '💻', desc: 'Máy tính, chuột, phím, màn hình' },
+  projector: { label: 'Máy chiếu', icon: '📽️', desc: 'Máy chiếu, màn chiếu, cáp kết nối' },
+  ac: { label: 'Điều hòa', icon: '❄️', desc: 'Máy lạnh, remote, thông gió' },
+  electrical: { label: 'Điện', icon: '⚡', desc: 'Ổ cắm, bóng đèn, quạt, công tắc' },
+  furniture: { label: 'Nội thất', icon: '🪑', desc: 'Bàn, ghế, bảng viết, cửa' },
+};
 
 /**
  * How urgently the issue needs to be addressed.
@@ -30,15 +36,31 @@ export type IssueType =
 export type PriorityLevel = 'low' | 'medium' | 'high' | 'critical';
 
 /**
+ * Backward-compatible IssueType
+ */
+export type IssueType =
+  | 'hardware'
+  | 'projector'
+  | 'ac'
+  | 'electrical'
+  | 'furniture'
+  | 'structural'
+  | 'cleanliness'
+  | 'other';
+
+/**
+ * Star Rating (1 - 5 stars)
+ */
+export const RATING_LABELS: Record<number, string> = {
+  1: 'Rất tệ (Hỏng nặng, không dùng được)',
+  2: 'Kém (Cần sửa chữa / bảo trì gấp)',
+  3: 'Bình thường (Có dấu hiệu hao mòn)',
+  4: 'Tốt (Hoạt động ổn định)',
+  5: 'Rất tốt (Thiết bị mới, hoàn hảo)',
+};
+
+/**
  * The primary data model — one facility inspection report.
- *
- * Design notes
- * ─────────────
- * • `localId`   is the IndexedDB keyPath — always present, generated offline via UUID v4.
- * • `serverId`  is null until a successful POST; used to detect "already synced".
- * • `photoBlob` holds the raw binary from Camera / file input.
- *   We do NOT store it as base64 in IndexedDB to avoid doubling memory usage.
- * • `photoDataUrl` is derived on-demand for <img> previews (not persisted).
  */
 export interface InspectionRecord {
   // ── Identity ──────────────────────────────────────────────────────────────
@@ -50,13 +72,20 @@ export interface InspectionRecord {
   retries: number;       // How many sync attempts have been made
   lastError?: string;    // Human-readable error from last failed attempt
 
-  // ── Inspection data ───────────────────────────────────────────────────────
-  buildingRoom: string;  // e.g. "Tòa A - Phòng 201"
-  issueType: IssueType;
-  priority: PriorityLevel;
-  notes: string;
+  // ── Step 1: Location ──────────────────────────────────────────────────────
+  building: string;      // Tòa nhà (e.g. "Tòa V", "Tòa K", "Tòa A")
+  floor: string;         // Tầng (e.g. "Tầng 1", "Tầng 2", "Tầng hầm")
+  room: string;          // Số phòng (e.g. "Phòng 201", "Lab 305")
+  buildingRoom: string;  // Combined display string
 
-  // ── Photo ─────────────────────────────────────────────────────────────────
+  // ── Step 2: Category & Rating ─────────────────────────────────────────────
+  category: FacilityCategory;
+  rating: number;        // 1 to 5 stars
+  priority: PriorityLevel;
+  issueType: IssueType;
+
+  // ── Step 3: Details & Evidence ────────────────────────────────────────────
+  notes: string;         // Ghi chú về lỗi
   photoBlob?: Blob;      // Raw image bytes (stored in IndexedDB)
   photoMimeType?: string; // e.g. "image/jpeg"
 
@@ -71,42 +100,56 @@ export interface InspectionRecord {
   syncedAt?: number;     // Date.now() when server confirmed receipt
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper type for creating a new record (omits server-managed fields)
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Form draft state stored in IndexedDB for real-time draft persistence
+ */
+export interface SurveyDraft {
+  id: 'current_draft';
+  step: number;
+  building: string;
+  floor: string;
+  room: string;
+  category?: FacilityCategory;
+  rating: number;
+  priority: PriorityLevel;
+  notes: string;
+  photoBlob?: Blob;
+  photoMimeType?: string;
+  latitude?: number;
+  longitude?: number;
+  accuracy?: number;
+  updatedAt: number;
+}
+
 export type NewInspectionRecord = Omit<
   InspectionRecord,
   'localId' | 'serverId' | 'status' | 'retries' | 'lastError' | 'createdAt' | 'updatedAt' | 'syncedAt'
 >;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GPS coordinates returned by the native / browser wrapper
-// ─────────────────────────────────────────────────────────────────────────────
 export interface GeoCoords {
   latitude: number;
   longitude: number;
   accuracy: number;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sync result reported back after a batch sync attempt
-// ─────────────────────────────────────────────────────────────────────────────
 export interface SyncResult {
   attempted: number;
   succeeded: number;
   failed: number;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Payload shape sent to the server (no raw Blob — must be serialised first)
-// ─────────────────────────────────────────────────────────────────────────────
 export interface SyncPayload {
   localId: string;
+  building: string;
+  floor: string;
+  room: string;
   buildingRoom: string;
+  category: FacilityCategory;
+  rating: number;
   issueType: IssueType;
   priority: PriorityLevel;
   notes: string;
-  photoBase64?: string;  // base64-encoded photo, or omitted if no photo
+  photoBase64?: string;
   photoMimeType?: string;
   latitude?: number;
   longitude?: number;
@@ -114,22 +157,7 @@ export interface SyncPayload {
   createdAt: number;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Router
-// ─────────────────────────────────────────────────────────────────────────────
 export type Route = '/' | '/new' | `/record/${string}`;
-
-// Display labels for UI rendering
-export const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
-  electrical: '⚡ Điện',
-  plumbing: '🚰 Nước / Ống',
-  structural: '🏗️ Kết cấu',
-  hvac: '❄️ Điều hòa',
-  cleanliness: '🧹 Vệ sinh',
-  safety: '⚠️ An toàn',
-  it_equipment: '💻 Thiết bị IT',
-  other: '🔧 Khác',
-};
 
 export const PRIORITY_LABELS: Record<PriorityLevel, string> = {
   low: 'Thấp',
@@ -143,4 +171,15 @@ export const STATUS_LABELS: Record<SyncStatus, string> = {
   pending_sync: '🔄 Chờ đồng bộ',
   synced: '✅ Đã đồng bộ',
   error: '❌ Lỗi đồng bộ',
+};
+
+export const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
+  hardware: '💻 Phần cứng',
+  projector: '📽️ Máy chiếu',
+  ac: '❄️ Điều hòa',
+  electrical: '⚡ Điện',
+  furniture: '🪑 Nội thất',
+  structural: '🏗️ Kết cấu',
+  cleanliness: '🧹 Vệ sinh',
+  other: '🔧 Khác',
 };
